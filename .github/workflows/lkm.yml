@@ -12,16 +12,17 @@ jobs:
     steps:
       - name: Environment Initialization
         run: |
-          sudo dnf install gcc clang lld repo bc flex openssl-devel openssl-devel-engine wget tar zstd bsdtar file rsync zip ast-grep -y
+          sudo dnf install gcc clang lld repo bc flex openssl-devel openssl-devel-engine wget tar zstd bsdtar file rsync zip -y
       - name: Clone Kernel
         run: |
           git clone --depth=1 https://github.com/cyberknight777/dragonheart_kernel_motorola_cancunf.git kernel
       - name: Build KSU LKM
         run: |
           cd kernel
+          curl -L https://github.com/ast-grep/ast-grep/releases/download/0.39.6/app-x86_64-unknown-linux-gnu.zip -o /tmp/astgrep.zip && unzip -j /tmp/astgrep.zip 'ast-grep' && chmod +x ast-grep && rm /tmp/astgrep.zip
           curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
-          ast-grep -U -p '$$$ check_exports($$$) {$$$}' -r '' scripts/mod/modpost.c
-          ast-grep -U -p 'check_exports($$$);' -r '' scripts/mod/modpost.c
+          ./ast-grep -U -p '$$$ check_exports($$$) {$$$}' -r '' scripts/mod/modpost.c
+          ./ast-grep -U -p 'check_exports($$$);' -r '' scripts/mod/modpost.c
           sed -i '/config KSU/,/help/{s/default y/default m/}' drivers/kernelsu/Kconfig
           bash kramel.sh --obj=security/ --obj=drivers/kernelsu/kernelsu.ko
           ./clang/bin/llvm-objcopy --strip-debug out/drivers/kernelsu/kernelsu.ko ./kernelsu.ko
@@ -32,8 +33,8 @@ jobs:
           cd kernel
           sed -i 's|/out|/out2|' kramel.sh
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
-          ast-grep -U -p '$$$ check_exports($$$) {$$$}' -r '' scripts/mod/modpost.c
-          ast-grep -U -p 'check_exports($$$);' -r '' scripts/mod/modpost.c
+          ./ast-grep -U -p '$$$ check_exports($$$) {$$$}' -r '' scripts/mod/modpost.c
+          ./ast-grep -U -p 'check_exports($$$);' -r '' scripts/mod/modpost.c
           sed -i '/config KSU/,/help/{s/default y/default m/}' drivers/kernelsu/Kconfig
           bash kramel.sh --obj=security/ --obj=drivers/kernelsu/kernelsu.ko
           ./clang/bin/llvm-objcopy --strip-debug out2/drivers/kernelsu/kernelsu.ko ./kernelsu_next.ko
