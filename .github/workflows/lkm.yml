@@ -1,0 +1,43 @@
+name: KernelSU / KernelSU-Next LKM CI
+
+on:
+  workflow_dispatch:
+
+jobs:
+  lkm-builder:
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:latest
+
+    steps:
+      - name: Environment Initialization
+        run: |
+          sudo dnf install gcc clang lld repo bc flex openssl-devel openssl-devel-engine wget tar zstd bsdtar file rsync zip -y
+      - name: Clone Kernel
+        run: |
+          git clone --depth=1 https://github.com/cyberknight777/dragonheart_kernel_motorola_cancunf.git kernel
+          cd kernel
+      - name: Build KSU LKM
+          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
+          ast-grep -U -p '$$$ check_exports($$$) {$$$}' -r '' scripts/mod/modpost.c
+          ast-grep -U -p 'check_exports($$$);' -r '' scripts/mod/modpost.c
+          sed -i '/config KSU/,/help/{s/default y/default m/}' drivers/kernelsu/Kconfig
+          bash kramel.sh --obj=security/ --obj=drivers/kernelsu/kernelsu.ko
+          ./clang/bin/llvm-objcopy --strip-debug out/drivers/kernelsu/kernelsu.ko ./kernelsu.ko
+          rm -rf KernelSU/ drivers/kernelsu
+          git restore drivers/ scripts/
+      - name: Build KSUN LKM
+          sed -i 's|/out|/out2|' kramel.sh
+          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
+          ast-grep -U -p '$$$ check_exports($$$) {$$$}' -r '' scripts/mod/modpost.c
+          ast-grep -U -p 'check_exports($$$);' -r '' scripts/mod/modpost.c
+          sed -i '/config KSU/,/help/{s/default y/default m/}' drivers/kernelsu/Kconfig
+          bash kramel.sh --obj=security/ --obj=drivers/kernelsu/kernelsu.ko
+          ./clang/bin/llvm-objcopy --strip-debug out2/drivers/kernelsu/kernelsu.ko ./kernelsu_next.ko
+      - name: Upload output to Github Releases
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "kernelsu.ko,kernelsu_next.ko"
+          name: "KernelSU / KernelSU-Next LKM for Motorola G54 5G"
+          tag: "ksu_lkm-${{ github.sha }}"
+          token: ${{ secrets.GITHUB_TOKEN }}
