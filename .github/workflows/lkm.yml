@@ -18,6 +18,7 @@ jobs:
           git clone --depth=1 https://github.com/cyberknight777/dragonheart_kernel_motorola_cancunf.git kernel
           cd kernel
       - name: Build KSU LKM
+        run: |
           curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
           ast-grep -U -p '$$$ check_exports($$$) {$$$}' -r '' scripts/mod/modpost.c
           ast-grep -U -p 'check_exports($$$);' -r '' scripts/mod/modpost.c
@@ -27,6 +28,7 @@ jobs:
           rm -rf KernelSU/ drivers/kernelsu
           git restore drivers/ scripts/
       - name: Build KSUN LKM
+        run: |
           sed -i 's|/out|/out2|' kramel.sh
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
           ast-grep -U -p '$$$ check_exports($$$) {$$$}' -r '' scripts/mod/modpost.c
