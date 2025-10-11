@@ -19,6 +19,7 @@ jobs:
           cd kernel
       - name: Build KSU LKM
         run: |
+          cd kernel
           curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
           ast-grep -U -p '$$$ check_exports($$$) {$$$}' -r '' scripts/mod/modpost.c
           ast-grep -U -p 'check_exports($$$);' -r '' scripts/mod/modpost.c
@@ -29,6 +30,7 @@ jobs:
           git restore drivers/ scripts/
       - name: Build KSUN LKM
         run: |
+          cd kernel
           sed -i 's|/out|/out2|' kramel.sh
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
           ast-grep -U -p '$$$ check_exports($$$) {$$$}' -r '' scripts/mod/modpost.c
@@ -39,7 +41,7 @@ jobs:
       - name: Upload output to Github Releases
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "kernelsu.ko,kernelsu_next.ko"
+          artifacts: "kernel/kernelsu.ko,kernel/kernelsu_next.ko"
           name: "KernelSU / KernelSU-Next LKM for Motorola G54 5G"
           tag: "ksu_lkm-${{ github.sha }}"
           token: ${{ secrets.GITHUB_TOKEN }}
