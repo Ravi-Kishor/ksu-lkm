@@ -132,7 +132,7 @@ jobs:
           perl -0pi -e 's/^([ \t]*)check_exports\(mod\);$/$1if (fnmatch("*kernelsu", mod->name, 0))\n$1\tcheck_exports(mod);/m' scripts/mod/modpost.c
           sed -i '/config KSU/,/help/{s/default y/default m/}' drivers/kernelsu/Kconfig
           bash kramel.sh --obj=security/ --extmod=$PWD/drivers/kernelsu
-          ./clang/bin/llvm-objcopy --strip-debug out/drivers/kernelsu/kernelsu.ko ./kernelsu.ko
+          ./clang/bin/llvm-objcopy --strip-debug drivers/kernelsu/kernelsu.ko ./kernelsu.ko
           rm -rf KernelSU/ drivers/kernelsu
           git restore drivers/ scripts/
       - name: Build KSUN LKM
@@ -143,7 +143,7 @@ jobs:
           perl -0pi -e 's/^([ \t]*)check_exports\(mod\);$/$1if (fnmatch("*kernelsu", mod->name, 0))\n$1\tcheck_exports(mod);/m' scripts/mod/modpost.c
           sed -i '/config KSU/,/help/{s/default y/default m/}' drivers/kernelsu/Kconfig
           bash kramel.sh --obj=security/ --extmod=$PWD/drivers/kernelsu
-          ./clang/bin/llvm-objcopy --strip-debug out2/drivers/kernelsu/kernelsu.ko ./kernelsu_next.ko
+          ./clang/bin/llvm-objcopy --strip-debug drivers/kernelsu/kernelsu.ko ./kernelsu_next.ko
           echo "DATE=$(date -u '+%Y%m%d%I%M')" >> $GITHUB_ENV
           echo "DATE=$DATE"
       - name: Upload output to Github Releases
