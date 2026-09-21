@@ -131,7 +131,7 @@ jobs:
           curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
           perl -0pi -e 's/^([ \t]*)check_exports\(mod\);$/$1if (fnmatch("*kernelsu", mod->name, 0))\n$1\tcheck_exports(mod);/m' scripts/mod/modpost.c
           sed -i '/config KSU/,/help/{s/default y/default m/}' drivers/kernelsu/Kconfig
-          bash kramel.sh --obj=security/ --extmod=drivers/kernelsu
+          bash kramel.sh --obj=security/ --extmod=$PWD/drivers/kernelsu
           ./clang/bin/llvm-objcopy --strip-debug out/drivers/kernelsu/kernelsu.ko ./kernelsu.ko
           rm -rf KernelSU/ drivers/kernelsu
           git restore drivers/ scripts/
@@ -142,7 +142,7 @@ jobs:
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
           perl -0pi -e 's/^([ \t]*)check_exports\(mod\);$/$1if (fnmatch("*kernelsu", mod->name, 0))\n$1\tcheck_exports(mod);/m' scripts/mod/modpost.c
           sed -i '/config KSU/,/help/{s/default y/default m/}' drivers/kernelsu/Kconfig
-          bash kramel.sh --obj=security/ --extmod=drivers/kernelsu
+          bash kramel.sh --obj=security/ --extmod=$PWD/drivers/kernelsu
           ./clang/bin/llvm-objcopy --strip-debug out2/drivers/kernelsu/kernelsu.ko ./kernelsu_next.ko
           echo "DATE=$(date -u '+%Y%m%d%I%M')" >> $GITHUB_ENV
           echo "DATE=$DATE"
