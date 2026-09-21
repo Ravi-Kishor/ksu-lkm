@@ -11,49 +11,111 @@ env:
   KSUPATCHER_REPO: akuatech/ksupatcher
 
 jobs:
+  # ============================================================
+  # Check upstream KernelSU / KernelSU-Next releases
+  # ============================================================
   check-upstream-releases:
     runs-on: ubuntu-latest
+
     outputs:
       should_run: ${{ steps.compare.outputs.should_run }}
+
       latest_ksu: ${{ steps.latest.outputs.latest_ksu }}
       latest_ksun: ${{ steps.latest.outputs.latest_ksun }}
+
       latest_ksu_ksud_url: ${{ steps.latest.outputs.latest_ksu_ksud_url }}
       latest_ksu_apk_url: ${{ steps.latest.outputs.latest_ksu_apk_url }}
+
       latest_ksun_ksud_url: ${{ steps.latest.outputs.latest_ksun_ksud_url }}
       latest_ksun_apk_url: ${{ steps.latest.outputs.latest_ksun_apk_url }}
 
     steps:
+      # --------------------------------------------------------
+      # Fetch latest upstream releases
+      # --------------------------------------------------------
       - name: Fetch latest upstream releases
         id: latest
+        shell: bash
         run: |
           set -euo pipefail
 
-          latestksu_json=$(curl -fsSL https://api.github.com/repos/Tiann/KernelSU/releases/latest)
-          latestksun_json=$(curl -fsSL https://api.github.com/repos/KernelSU-Next/KernelSU-Next/releases/latest)
+          latestksu_json="$(
+            curl -fsSL \
+              --retry 3 \
+              --retry-delay 2 \
+              https://api.github.com/repos/Tiann/KernelSU/releases/latest
+          )"
 
-          latestksu=$(jq -r '.tag_name' <<< "${latestksu_json}")
-          latestksun=$(jq -r '.tag_name' <<< "${latestksun_json}")
-          latestksu_ksud_url=$(jq -r '([.assets[]? | select(.name == "ksud-aarch64-linux-android") | .browser_download_url][0]) // ""' <<< "${latestksu_json}")
-          latestksu_apk_url=$(jq -r '([.assets[]? | select(.name | endswith("-release.apk")) | .browser_download_url][0]) // ""' <<< "${latestksu_json}")
-          latestksun_ksud_url=$(jq -r '([.assets[]? | select(.name == "ksud-aarch64-linux-android") | .browser_download_url][0]) // ""' <<< "${latestksun_json}")
-          latestksun_apk_url=$(jq -r '([.assets[]? | select(.name | endswith("-release.apk")) | .browser_download_url][0]) // ""' <<< "${latestksun_json}")
+          latestksun_json="$(
+            curl -fsSL \
+              --retry 3 \
+              --retry-delay 2 \
+              https://api.github.com/repos/KernelSU-Next/KernelSU-Next/releases/latest
+          )"
+
+          latestksu="$(jq -r '.tag_name' <<< "${latestksu_json}")"
+          latestksun="$(jq -r '.tag_name' <<< "${latestksun_json}")"
+
+          latestksu_ksud_url="$(
+            jq -r '
+              ([.assets[]?
+                | select(.name == "ksud-aarch64-linux-android")
+                | .browser_download_url][0]) // ""
+            ' <<< "${latestksu_json}"
+          )"
+
+          latestksu_apk_url="$(
+            jq -r '
+              ([.assets[]?
+                | select(.name | endswith("-release.apk"))
+                | .browser_download_url][0]) // ""
+            ' <<< "${latestksu_json}"
+          )"
+
+          latestksun_ksud_url="$(
+            jq -r '
+              ([.assets[]?
+                | select(.name == "ksud-aarch64-linux-android")
+                | .browser_download_url][0]) // ""
+            ' <<< "${latestksun_json}"
+          )"
+
+          latestksun_apk_url="$(
+            jq -r '
+              ([.assets[]?
+                | select(.name | endswith("-release.apk"))
+                | .browser_download_url][0]) // ""
+            ' <<< "${latestksun_json}"
+          )"
+
+          echo "Latest KernelSU:       ${latestksu}"
+          echo "Latest KernelSU-Next:  ${latestksun}"
 
           echo "latest_ksu=${latestksu}" >> "$GITHUB_OUTPUT"
           echo "latest_ksun=${latestksun}" >> "$GITHUB_OUTPUT"
+
           echo "latest_ksu_ksud_url=${latestksu_ksud_url}" >> "$GITHUB_OUTPUT"
           echo "latest_ksu_apk_url=${latestksu_apk_url}" >> "$GITHUB_OUTPUT"
+
           echo "latest_ksun_ksud_url=${latestksun_ksud_url}" >> "$GITHUB_OUTPUT"
           echo "latest_ksun_apk_url=${latestksun_apk_url}" >> "$GITHUB_OUTPUT"
 
+      # --------------------------------------------------------
+      # Compare KSUD binaries
+      # --------------------------------------------------------
       - name: Compare against current KSUD binaries
         id: compare
         env:
           LATEST_KSU: ${{ steps.latest.outputs.latest_ksu }}
           LATEST_KSUN: ${{ steps.latest.outputs.latest_ksun }}
+
           LATEST_KSU_KSUD_URL: ${{ steps.latest.outputs.latest_ksu_ksud_url }}
           LATEST_KSU_APK_URL: ${{ steps.latest.outputs.latest_ksu_apk_url }}
+
           LATEST_KSUN_KSUD_URL: ${{ steps.latest.outputs.latest_ksun_ksud_url }}
           LATEST_KSUN_APK_URL: ${{ steps.latest.outputs.latest_ksun_apk_url }}
+
+        shell: bash
         run: |
           set -euo pipefail
 
@@ -64,8 +126,15 @@ jobs:
             local tmpdir
 
             if [ -n "${direct_url}" ]; then
-              echo "Downloading KSUD from ${direct_url}"
-              curl -fL --retry 3 --retry-delay 2 "${direct_url}" -o "${output}"
+              echo "Downloading KSUD from:"
+              echo "${direct_url}"
+
+              curl -fL \
+                --retry 3 \
+                --retry-delay 2 \
+                "${direct_url}" \
+                -o "${output}"
+
               return 0
             fi
 
@@ -74,86 +143,464 @@ jobs:
               return 1
             fi
 
-            tmpdir=$(mktemp -d)
-            echo "Standalone KSUD asset missing, extracting libksud.so from ${apk_url}"
-            curl -fL --retry 3 --retry-delay 2 "${apk_url}" -o "${tmpdir}/release.apk"
-            unzip -p "${tmpdir}/release.apk" lib/arm64-v8a/libksud.so > "${output}"
+            tmpdir="$(mktemp -d)"
+
+            echo "Standalone KSUD asset missing."
+            echo "Extracting libksud.so from APK."
+
+            curl -fL \
+              --retry 3 \
+              --retry-delay 2 \
+              "${apk_url}" \
+              -o "${tmpdir}/release.apk"
+
+            unzip -p \
+              "${tmpdir}/release.apk" \
+              lib/arm64-v8a/libksud.so \
+              > "${output}"
+
             rm -rf "${tmpdir}"
           }
 
-          git clone --depth=1 "https://github.com/${KSUPATCHER_REPO}.git" ksupatcher
+          git clone \
+            --depth=1 \
+            "https://github.com/${KSUPATCHER_REPO}.git" \
+            ksupatcher
+
           mkdir -p latest
 
-          download_ksud "${LATEST_KSU_KSUD_URL}" "${LATEST_KSU_APK_URL}" latest/libksud.so
-          download_ksud "${LATEST_KSUN_KSUD_URL}" "${LATEST_KSUN_APK_URL}" latest/libksud_next.so
+          download_ksud \
+            "${LATEST_KSU_KSUD_URL}" \
+            "${LATEST_KSU_APK_URL}" \
+            latest/libksud.so
+
+          download_ksud \
+            "${LATEST_KSUN_KSUD_URL}" \
+            "${LATEST_KSUN_APK_URL}" \
+            latest/libksud_next.so
 
           current_ksu="ksupatcher/app/src/main/jniLibs/arm64-v8a/libksud.so"
           current_ksun="ksupatcher/app/src/main/jniLibs/arm64-v8a/libksud_next.so"
 
-          echo "Latest KernelSU release: ${LATEST_KSU}"
+          echo "Latest KernelSU release:      ${LATEST_KSU}"
           echo "Latest KernelSU-Next release: ${LATEST_KSUN}"
 
           if [ ! -f "${current_ksu}" ] || [ ! -f "${current_ksun}" ]; then
-            echo "Current KSUD binaries are missing in ${KSUPATCHER_REPO}"
+            echo "Current KSUD binaries are missing."
             echo "should_run=true" >> "$GITHUB_OUTPUT"
-          elif ! cmp -s latest/libksud.so "${current_ksu}" || ! cmp -s latest/libksud_next.so "${current_ksun}"; then
-            echo "Detected upstream KSUD binary change"
+
+          elif \
+            ! cmp -s latest/libksud.so "${current_ksu}" || \
+            ! cmp -s latest/libksud_next.so "${current_ksun}"; then
+
+            echo "Detected upstream KSUD binary change."
             echo "should_run=true" >> "$GITHUB_OUTPUT"
+
           else
-            echo "Current KSUD binaries already match upstream releases"
+            echo "Current KSUD binaries already match upstream."
             echo "should_run=false" >> "$GITHUB_OUTPUT"
           fi
 
+  # ============================================================
+  # Build KernelSU / KernelSU-Next LKM
+  # ============================================================
   lkm-builder:
     needs: check-upstream-releases
-    if: ${{ github.event_name == 'workflow_dispatch' || needs.check-upstream-releases.outputs.should_run == 'true' }}
+
+    if: >
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        needs.check-upstream-releases.outputs.should_run == 'true'
+      }}
+
     runs-on: ubuntu-latest
+
     container:
       image: fedora:latest
+
     env:
       LATEST_KSU: ${{ needs.check-upstream-releases.outputs.latest_ksu }}
       LATEST_KSUN: ${{ needs.check-upstream-releases.outputs.latest_ksun }}
+
       LATEST_KSU_KSUD_URL: ${{ needs.check-upstream-releases.outputs.latest_ksu_ksud_url }}
       LATEST_KSU_APK_URL: ${{ needs.check-upstream-releases.outputs.latest_ksu_apk_url }}
+
       LATEST_KSUN_KSUD_URL: ${{ needs.check-upstream-releases.outputs.latest_ksun_ksud_url }}
       LATEST_KSUN_APK_URL: ${{ needs.check-upstream-releases.outputs.latest_ksun_apk_url }}
 
     steps:
-      - name: Environment Initialization
+
+      # ========================================================
+      # Environment
+      # ========================================================
+      - name: Initialize build environment
+        shell: bash
         run: |
-          sudo dnf install gcc clang lld repo bc flex openssl-devel openssl-devel-engine wget tar zstd bsdtar file rsync zip bison cmp which git jq -y
-      - name: Clone Kernel
+          set -euo pipefail
+
+          dnf install -y \
+            bash \
+            bc \
+            bison \
+            bsdtar \
+            clang \
+            curl \
+            diffutils \
+            elfutils-libelf-devel \
+            file \
+            flex \
+            gcc \
+            gcc-c++ \
+            git \
+            glibc-devel \
+            jq \
+            lld \
+            make \
+            openssl-devel \
+            patch \
+            perl \
+            python3 \
+            rsync \
+            tar \
+            unzip \
+            wget \
+            which \
+            zip \
+            zstd
+
+          echo "Build environment initialized."
+
+          gcc --version | head -n 1
+          clang --version | head -n 1
+          ld.lld --version | head -n 1
+          make --version | head -n 1
+
+      # ========================================================
+      # Clone target kernel
+      # ========================================================
+      - name: Clone kernel
+        shell: bash
         run: |
-          git clone --depth=1 https://github.com/cyberknight777/dragonheart_kernel_motorola_cancunf.git kernel
-      - name: Build KSU LKM
+          set -euo pipefail
+
+          git clone \
+            --depth=1 \
+            https://github.com/cyberknight777/dragonheart_kernel_motorola_cancunf.git \
+            kernel
+
+      # ========================================================
+      # Build KernelSU LKM
+      # ========================================================
+      - name: Build KernelSU LKM
+        shell: bash
         run: |
+          set -euo pipefail
+
           cd kernel
-          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
-          perl -0pi -e 's/^([ \t]*)check_exports\(mod\);$/$1if (fnmatch("*kernelsu", mod->name, 0))\n$1\tcheck_exports(mod);/m' scripts/mod/modpost.c
-          sed -i '/config KSU/,/help/{s/default y/default m/}' drivers/kernelsu/Kconfig
-          bash kramel.sh --obj=security/ --extmod=drivers/kernelsu
-          ./clang/bin/llvm-objcopy --strip-debug out/drivers/kernelsu/kernelsu.ko ./kernelsu.ko
-          rm -rf KernelSU/ drivers/kernelsu
+
+          echo "=========================================="
+          echo " Installing KernelSU"
+          echo "=========================================="
+
+          curl -LSs \
+            "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" \
+            | bash -
+
+          echo
+          echo "=========================================="
+          echo " KernelSU tree"
+          echo "=========================================="
+
+          readlink -f drivers/kernelsu || true
+
+          echo
+          echo "Checking KernelSU headers..."
+
+          test -f drivers/kernelsu/policy/allowlist.h
+          test -f drivers/kernelsu/feature/kernel_umount.h
+
+          if [ -f drivers/kernelsu/include/arch.h ]; then
+            echo "Found: drivers/kernelsu/include/arch.h"
+          elif [ -f drivers/kernelsu/arch.h ]; then
+            echo "Found: drivers/kernelsu/arch.h"
+          else
+            echo "WARNING: arch.h location differs from expected layout."
+            find drivers/kernelsu -name arch.h -print
+          fi
+
+          echo
+          echo "=========================================="
+          echo " Fixing modpost export handling"
+          echo "=========================================="
+
+          perl -0pi -e \
+            's/^([ \t]*)check_exports\(mod\);$/$1if (fnmatch("*kernelsu", mod->name, 0))\n$1\tcheck_exports(mod);/m' \
+            scripts/mod/modpost.c
+
+          echo
+          echo "=========================================="
+          echo " Configure KernelSU as module"
+          echo "=========================================="
+
+          sed -i \
+            '/config KSU/,/help/{s/default y/default m/}' \
+            drivers/kernelsu/Kconfig
+
+          echo
+          echo "=========================================="
+          echo " KernelSU include paths"
+          echo "=========================================="
+
+          export KSU_KERNEL_DIR="$(realpath drivers/kernelsu)"
+
+          # ----------------------------------------------------
+          # IMPORTANT:
+          #
+          # KernelSU sources use internal includes such as:
+          #
+          #   policy/allowlist.h
+          #   feature/kernel_umount.h
+          #   arch.h
+          #
+          # kramel.sh's external-module build path does not
+          # reliably inherit KernelSU's normal Kbuild include
+          # paths, so explicitly add them.
+          # ----------------------------------------------------
+
+          export KCFLAGS="\
+          -I${KSU_KERNEL_DIR} \
+          -I${KSU_KERNEL_DIR}/include \
+          ${KCFLAGS:-}"
+
+          export CFLAGS_MODULE="${CFLAGS_MODULE:-} \
+          -I${KSU_KERNEL_DIR} \
+          -I${KSU_KERNEL_DIR}/include"
+
+          export KCPPFLAGS="${KCPPFLAGS:-} \
+          -I${KSU_KERNEL_DIR} \
+          -I${KSU_KERNEL_DIR}/include"
+
+          echo "KSU_KERNEL_DIR=${KSU_KERNEL_DIR}"
+          echo "KCFLAGS=${KCFLAGS}"
+          echo "CFLAGS_MODULE=${CFLAGS_MODULE}"
+          echo "KCPPFLAGS=${KCPPFLAGS}"
+
+          echo
+          echo "=========================================="
+          echo " Build KernelSU"
+          echo "=========================================="
+
+          bash kramel.sh \
+            --obj=security/ \
+            --extmod=drivers/kernelsu
+
+          echo
+          echo "=========================================="
+          echo " Strip KernelSU LKM"
+          echo "=========================================="
+
+          test -f out/drivers/kernelsu/kernelsu.ko
+
+          ./clang/bin/llvm-objcopy \
+            --strip-debug \
+            out/drivers/kernelsu/kernelsu.ko \
+            ./kernelsu.ko
+
+          test -f ./kernelsu.ko
+
+          echo
+          echo "KernelSU LKM:"
+          file ./kernelsu.ko
+          ls -lh ./kernelsu.ko
+
+          echo
+          echo "=========================================="
+          echo " Cleanup KernelSU"
+          echo "=========================================="
+
+          rm -rf \
+            KernelSU/ \
+            drivers/kernelsu
+
           git restore drivers/ scripts/
-      - name: Build KSUN LKM
+
+      # ========================================================
+      # Build KernelSU-Next LKM
+      # ========================================================
+      - name: Build KernelSU-Next LKM
+        shell: bash
         run: |
+          set -euo pipefail
+
           cd kernel
+
+          echo "=========================================="
+          echo " Preparing KernelSU-Next output"
+          echo "=========================================="
+
           sed -i 's|/out|/out2|' kramel.sh
-          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
-          perl -0pi -e 's/^([ \t]*)check_exports\(mod\);$/$1if (fnmatch("*kernelsu", mod->name, 0))\n$1\tcheck_exports(mod);/m' scripts/mod/modpost.c
-          sed -i '/config KSU/,/help/{s/default y/default m/}' drivers/kernelsu/Kconfig
-          bash kramel.sh --obj=security/ --extmod=drivers/kernelsu
-          ./clang/bin/llvm-objcopy --strip-debug out2/drivers/kernelsu/kernelsu.ko ./kernelsu_next.ko
-          echo "DATE=$(date -u '+%Y%m%d%I%M')" >> $GITHUB_ENV
-          echo "DATE=$DATE"
-      - name: Upload output to Github Releases
+
+          echo
+          echo "=========================================="
+          echo " Installing KernelSU-Next"
+          echo "=========================================="
+
+          curl -LSs \
+            "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" \
+            | bash -
+
+          echo
+          echo "=========================================="
+          echo " KernelSU-Next tree"
+          echo "=========================================="
+
+          readlink -f drivers/kernelsu || true
+
+          echo
+          echo "Checking KernelSU-Next headers..."
+
+          test -f drivers/kernelsu/policy/allowlist.h
+          test -f drivers/kernelsu/feature/kernel_umount.h
+
+          if [ -f drivers/kernelsu/include/arch.h ]; then
+            echo "Found: drivers/kernelsu/include/arch.h"
+          elif [ -f drivers/kernelsu/arch.h ]; then
+            echo "Found: drivers/kernelsu/arch.h"
+          else
+            echo "WARNING: arch.h location differs from expected layout."
+            find drivers/kernelsu -name arch.h -print
+          fi
+
+          echo
+          echo "=========================================="
+          echo " Fixing modpost export handling"
+          echo "=========================================="
+
+          perl -0pi -e \
+            's/^([ \t]*)check_exports\(mod\);$/$1if (fnmatch("*kernelsu", mod->name, 0))\n$1\tcheck_exports(mod);/m' \
+            scripts/mod/modpost.c
+
+          echo
+          echo "=========================================="
+          echo " Configure KernelSU-Next as module"
+          echo "=========================================="
+
+          sed -i \
+            '/config KSU/,/help/{s/default y/default m/}' \
+            drivers/kernelsu/Kconfig
+
+          echo
+          echo "=========================================="
+          echo " KernelSU-Next include paths"
+          echo "=========================================="
+
+          export KSU_KERNEL_DIR="$(realpath drivers/kernelsu)"
+
+          # Same explicit include-path fix as KernelSU.
+          export KCFLAGS="\
+          -I${KSU_KERNEL_DIR} \
+          -I${KSU_KERNEL_DIR}/include \
+          ${KCFLAGS:-}"
+
+          export CFLAGS_MODULE="${CFLAGS_MODULE:-} \
+          -I${KSU_KERNEL_DIR} \
+          -I${KSU_KERNEL_DIR}/include"
+
+          export KCPPFLAGS="${KCPPFLAGS:-} \
+          -I${KSU_KERNEL_DIR} \
+          -I${KSU_KERNEL_DIR}/include"
+
+          echo "KSU_KERNEL_DIR=${KSU_KERNEL_DIR}"
+          echo "KCFLAGS=${KCFLAGS}"
+          echo "CFLAGS_MODULE=${CFLAGS_MODULE}"
+          echo "KCPPFLAGS=${KCPPFLAGS}"
+
+          echo
+          echo "=========================================="
+          echo " Build KernelSU-Next"
+          echo "=========================================="
+
+          bash kramel.sh \
+            --obj=security/ \
+            --extmod=drivers/kernelsu
+
+          echo
+          echo "=========================================="
+          echo " Strip KernelSU-Next LKM"
+          echo "=========================================="
+
+          test -f out2/drivers/kernelsu/kernelsu.ko
+
+          ./clang/bin/llvm-objcopy \
+            --strip-debug \
+            out2/drivers/kernelsu/kernelsu.ko \
+            ./kernelsu_next.ko
+
+          test -f ./kernelsu_next.ko
+
+          echo
+          echo "KernelSU-Next LKM:"
+          file ./kernelsu_next.ko
+          ls -lh ./kernelsu_next.ko
+
+          echo
+          echo "=========================================="
+          echo " Build timestamp"
+          echo "=========================================="
+
+          echo "DATE=$(date -u '+%Y%m%d%H%M')" >> "$GITHUB_ENV"
+
+          echo "DATE=$(date -u '+%Y%m%d%H%M')"
+
+      # ========================================================
+      # Verify artifacts
+      # ========================================================
+      - name: Verify generated LKMs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cd kernel
+
+          echo "=========================================="
+          echo " Generated artifacts"
+          echo "=========================================="
+
+          test -s kernelsu.ko
+          test -s kernelsu_next.ko
+
+          ls -lh \
+            kernelsu.ko \
+            kernelsu_next.ko
+
+          echo
+          echo "SHA256:"
+          sha256sum \
+            kernelsu.ko \
+            kernelsu_next.ko
+
+          echo
+          echo "File information:"
+          file \
+            kernelsu.ko \
+            kernelsu_next.ko
+
+      # ========================================================
+      # Upload LKM release
+      # ========================================================
+      - name: Upload LKM artifacts to GitHub Release
         uses: ncipollo/release-action@v1
         with:
           artifacts: "kernel/kernelsu.ko,kernel/kernelsu_next.ko"
           name: "KernelSU / KernelSU-Next LKM for Motorola G54 5G"
           tag: "ksu_lkm-${{ env.DATE }}"
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      # ========================================================
+      # Push updated KSUD binaries
+      # ========================================================
       - name: Push KSUD
+        shell: bash
         run: |
           set -euo pipefail
 
@@ -164,8 +611,15 @@ jobs:
             local tmpdir
 
             if [ -n "${direct_url}" ]; then
-              echo "Downloading KSUD from ${direct_url}"
-              curl -fL --retry 3 --retry-delay 2 "${direct_url}" -o "${output}"
+              echo "Downloading KSUD from:"
+              echo "${direct_url}"
+
+              curl -fL \
+                --retry 3 \
+                --retry-delay 2 \
+                "${direct_url}" \
+                -o "${output}"
+
               chmod 0644 "${output}"
               return 0
             fi
@@ -175,31 +629,93 @@ jobs:
               return 1
             fi
 
-            tmpdir=$(mktemp -d)
-            echo "Standalone KSUD asset missing, extracting libksud.so from ${apk_url}"
-            curl -fL --retry 3 --retry-delay 2 "${apk_url}" -o "${tmpdir}/release.apk"
-            unzip -p "${tmpdir}/release.apk" lib/arm64-v8a/libksud.so > "${output}"
+            tmpdir="$(mktemp -d)"
+
+            echo "Standalone KSUD asset missing."
+            echo "Extracting libksud.so from APK."
+
+            curl -fL \
+              --retry 3 \
+              --retry-delay 2 \
+              "${apk_url}" \
+              -o "${tmpdir}/release.apk"
+
+            unzip -p \
+              "${tmpdir}/release.apk" \
+              lib/arm64-v8a/libksud.so \
+              > "${output}"
+
             chmod 0644 "${output}"
+
             rm -rf "${tmpdir}"
           }
+
+          echo "=========================================="
+          echo " Configure Git"
+          echo "=========================================="
 
           git config --global user.name "Cyber Knight"
           git config --global user.email "cyberknight755@gmail.com"
 
-          git clone "https://${GH_USERNAME}:${GH_TOKEN}@github.com/${KSUPATCHER_REPO}.git" ksupatcher
+          echo
+          echo "=========================================="
+          echo " Clone KSUPatcher"
+          echo "=========================================="
+
+          git clone \
+            "https://${GH_USERNAME}:${GH_TOKEN}@github.com/${KSUPATCHER_REPO}.git" \
+            ksupatcher
+
           cd ksupatcher
 
-          mkdir -p app/src/main/jniLibs/arm64-v8a
-          download_ksud "${LATEST_KSU_KSUD_URL}" "${LATEST_KSU_APK_URL}" app/src/main/jniLibs/arm64-v8a/libksud.so
-          download_ksud "${LATEST_KSUN_KSUD_URL}" "${LATEST_KSUN_APK_URL}" app/src/main/jniLibs/arm64-v8a/libksud_next.so
+          echo
+          echo "=========================================="
+          echo " Update KSUD assets"
+          echo "=========================================="
+
+          mkdir -p \
+            app/src/main/jniLibs/arm64-v8a
+
+          download_ksud \
+            "${LATEST_KSU_KSUD_URL}" \
+            "${LATEST_KSU_APK_URL}" \
+            app/src/main/jniLibs/arm64-v8a/libksud.so
+
+          download_ksud \
+            "${LATEST_KSUN_KSUD_URL}" \
+            "${LATEST_KSUN_APK_URL}" \
+            app/src/main/jniLibs/arm64-v8a/libksud_next.so
+
+          echo
+          echo "=========================================="
+          echo " Check for changes"
+          echo "=========================================="
 
           if git diff --quiet -- app/src/main/jniLibs/arm64-v8a; then
-            echo "No KSUD updates detected"
+            echo "No KSUD updates detected."
             exit 0
           fi
 
-          git add app/src/main/jniLibs/arm64-v8a
-          git commit -m "ksupatcher: Update KSUD assets" \
+          git status --short
+
+          echo
+          echo "=========================================="
+          echo " Commit KSUD updates"
+          echo "=========================================="
+
+          git add \
+            app/src/main/jniLibs/arm64-v8a
+
+          git commit \
+            -m "ksupatcher: Update KSUD assets" \
             -m "KernelSU: ${LATEST_KSU}" \
             -m "KernelSU-Next: ${LATEST_KSUN}"
+
+          echo
+          echo "=========================================="
+          echo " Push KSUD updates"
+          echo "=========================================="
+
           git push origin HEAD
+
+          echo "KSUD update pushed successfully."
